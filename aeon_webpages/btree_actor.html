@@ -1,0 +1,201 @@
+<html>
+	<head>
+  		<link href="css/shCore.css" rel="stylesheet" type="text/css" />
+  		<link href="css/shThemeDefault.css" rel="stylesheet" type="text/css" />
+      <title>BTree Example</title>
+	</head>
+
+	<body>
+		  <pre class='brush: cpp'>
+        #include "stdlib.h"
+
+        struct KeyInfo {
+          int key;
+          int value;
+          BTreeNode l_node;
+          BTreeNode r_node;
+        };
+
+        
+        ActorClass BTreeNode {
+          vector< KeyInfo > keyInfos;
+    
+          uint32_t parentId;
+          bool root_flag;
+          bool leaf_flag;
+
+          ro int searchKeyInBTreeNode( const int& key);
+          ex void insertKeyToBTreeNode( const int& key, const int& value );
+          ex void deleteKeyFromBTreeNode( const int& key );
+
+          ex void adjust(const uint32_t& childId);
+          ex KeyInfo removeMostLeftKeyFromBTree();
+          ex KeyInfo removeMostRightKeyFromBTree();
+        };
+
+        ActorClass BTree {
+          BTreeNode root;
+
+          ro int searchKeyInBTree(const int& key);
+          ex void insertKeyToBTree( const int& key, const int& value );
+          ex void deleteKeyFromBTree( const int& key );
+        };
+
+
+        int BTree::searchKeyInBTree(const int& key, const MaceKey& src){
+          if( root == NULL){
+            return -1;
+          }
+          return asynch root.searchKeyInBTreeNode(key, src);
+        }
+
+        void BTree::insertKeyToBTree( const int& key, const int& value ) {
+          asynch root.insertKeyToBTreeNode(key, value);
+        }
+
+        void BTree::deleteKeyFromBTree( const int& key ) {
+          asynch root.deleteKeyFromBTreeNode(key);
+        }
+
+        void BTreeNode::searchKeyInBTreeNode(const int& key) {
+          uint32_t i;
+          BTreeNode nextNode = NULL;
+          for(i=0; i < keyInfos.size(); i++) {
+            if( keyInfos[i].key == key ) {
+              return;
+            } else if( keyInfos[i].key > key ) {
+              nextNode = keyInfos[i].l_node;
+              break;
+            }
+
+            if( i+1 == keyInfos.size() && key > keyInfos[i].key ) {
+              nextNode = keyInfos[i].r_node;
+              break;
+            }
+          }
+
+          if( nextNode != NULL ) {
+            asynch nextNode.searchKey( clientId, key, src );
+          }
+        }
+
+        void BTreeNode::insertKeyToBTreeNode( const int& key, const int& value ) {
+          vector< KeyInfo >::iterator k_iter; 
+          BTreeNode nextNode = NULL;
+          uint32_t i = 0;
+          for( k_iter = keyInfos.begin(); k_iter != keyInfos.end(); k_iter++, i++ ) {
+            if( keyInfos[i].key == key ) {
+              keyInfos[i].value = value;
+              return;
+            } else if( keyInfos[i].key > key ) {
+              nextNode = keyInfos[i].l_node;
+              break;
+            }
+
+            if( i+1==keyInfos.size() && keyInfos[i].key < key ) {
+              nextNode = keyInfos[i].r_node;
+            }
+          }  
+
+          if(nextNode == NULL) {
+            KeyInfo newKey( key, value, NULL, NULL );
+          
+            if( k_iter == keyInfos.end() ) {
+              keyInfos.push_back(newKey);
+            } else {
+              keyInfos.insert(k_iter, newKey);
+            }
+      
+            if( keyInfos.size() > MAX_NKEY_PER_NODE ) {
+              if( parentId == 0 ) { // this node is the root
+                event this->adjust(0);
+              } else {
+                BTreeNode parentNode = getActor("BTreeNode", parentId);
+                event parentNode.adjust( this->getActorID() );
+              }
+            }
+          } else {
+            asynch nextNode.insertKeyToBTreeNode(key, value);
+          }
+        }
+
+        void BTreeNode::deleteKeyFromBTreeNode( const int& key ) {
+          BTreeNode nextNode = NULL;
+          vector< KeyInfo >::iterator k_iter = keyInfos.begin();
+          bool found = false;
+          for(; k_iter != keyInfos.end(); k_iter ++ ) {
+            if( (*k_iter).key == key ) {
+              found = true;
+              break;
+            } else if( tempKey > key ) {
+              nextNode = (*k_iter).l_node;
+              break;
+            }
+
+            if( k_iter+1 == keyInfos.end() && key > (*k_iter).key ) {
+              nextNode = (*k_iter).r_node;
+            } 
+          } 
+
+          if( found ){
+            BTreeNode r_node = NULL;
+            BTreeNode l_node = (*k_iter).l_node;
+            if( k_iter+1 == keyInfos.end() ) {
+              r_node = (*k_iter).r_node;
+            } else {
+              k_iter ++;
+              r_node = (*k_iter).l_node;
+              k_iter --;
+            }
+            if( r_node != NULL ) { // get the smallest key from right sub-tree
+              KeyInfo new_key = synch r_node.removeMostLeftKeyFromBTree();
+              (*k_iter).key = new_key.key;
+              (*k_iter).value = new_key.value;
+            } else if( l_node != NULL ) { // get the largest key from left sub-tree
+              KeyInfo new_key = synch l_node.removeMostRightKeyFromBTree();
+              (*k_iter).key = new_key.key;
+              (*k_iter).value = new_key.value;
+            } else { // it is the leaf node
+              keyInfos.erase(k_iter);
+
+              if( keyInfos.size() < MIN_NKEY_PER_NODE ) {
+                if( parentId == 0 ) { // this node is the root
+                  event this->adjust(0);
+                } else {
+                  BTreeNode parentNode = getActor("BTreeNode", parentId);
+                  event parentNode.adjust( this->getActorID() );
+                }
+              } 
+            }
+            return;
+          } else if( nextNode != NULL ) { // search in the sub-tree
+            asynch nextNode.deleteKeyFromBTreeNode(key);
+          }
+        }
+
+        // merge or split nodes
+        void BTreeNode::adjust(const uint32_t& childId) {
+          ...
+        }  
+
+        KeyInfo BTreeNode::removeMostLeftKeyFromBTree() {
+          ...
+        }
+
+        KeyInfo BTreeNode::removeMostRightKeyFromBTree(){
+          ...
+        }
+
+  </pre>
+
+      
+
+
+		<script src="js/shCore.js"></script>
+  		<script src="js/shBrushCpp.js"></script>
+  		<script>
+    		SyntaxHighlighter.all()
+  		</script>
+	</body>
+</html>
+

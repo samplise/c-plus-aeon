@@ -1,0 +1,805 @@
+<html>
+	<head>
+  		<link href="css/shCore.css" rel="stylesheet" type="text/css" />
+  		<link href="css/shThemeDefault.css" rel="stylesheet" type="text/css" />
+      <title>BTree Example</title>
+	</head>
+
+	<body>
+		  <pre class='brush: cpp'>
+        #include "stdlib.h"
+
+        service BTreeApp;
+        provides NULL;
+
+        message Request {
+          uint8_t op_type;
+          int key;
+          int value;
+        };
+
+        message Reply {
+          bool succ;
+        };
+
+        constants {
+          uint8_t READ_OP = 0;
+          uint8_t INSERT_OP = 1;
+          uint8_t DELETE_OP = 2;
+        };
+
+        constructor_parameters {
+          uint32_t MAX_NKEY_PER_NODE = 10;
+          uint32_t MIN_NKEY_PER_NODE = 5;
+        };
+
+        struct KeyInfo {
+          int key;
+          int value;
+          BTreeNode l_node;
+          BTreeNode r_node;
+        };
+
+        
+        contextclass BTreeNode {
+          vector<KeyInfo> keyInfos;
+    
+          uint32_t parentId;
+          bool root_flag;
+          bool leaf_flag;
+
+          void initializeBTreeNode( const uint32_t& pNodeId, const bool& r_flag, const bool&  l_flag );
+          ro void searchKeyInBTreeNode( const int& key, const MaceKey& src );
+          void insertKeyToBTreeNode( const int& key, const int& value );
+
+          void adjust(const uint32_t& childId);
+
+          void initializeBTreeNode2( const uint32_t& pNodeId, const bool& r_flag, const vector<KeyInfo>& k_infos );
+          uint32_t getKeySize();
+          KeyInfo removeMostRightKeyFromBTree();
+          KeyInfo removeMostLeftKeyFromBTree();
+          void setParentNodeID(const uint32_t& pId);
+          KeyInfo removeMostLeftKey();
+          void addMostRightKey(const KeyInfo& newKeyInfo);
+          KeyInfo removeMostRightKey();
+          void addMostLeftKey(const KeyInfo& newKeyInfo);
+          void addMostRightKeys(const vector<KeyInfo>& newKeyInfos);
+          void addMostLeftKeys(const vector<KeyInfo>& newKeyInfos);
+          vector<KeyInfo> splitLeftKeys();
+          vector<KeyInfo> getKeys();
+          void updateKeyInfos( const vector<KeyInfo>& new_key_infos );
+        };
+
+        contextclass BTree {
+          BTreeNode root;
+
+          void initBTree();
+          ro void searchKeyInBTree(const int& key, const MaceKey& src);
+          void insertKeyToBTree( const int& key, const int& value );
+          void deleteKeyFromBTree( const int& key );
+        };
+
+
+        upcall deliver( const MaceKey& dest, const MaceKey& src, const Request& msg ){
+          BTree tree = getContextObject("BTree", 0);
+
+          if( msg.op_type == READ_OP )
+            event tree.searchKeyInBTree( msg.key, src );
+          } else if( msg.op_type == INSERT_OP )
+            event tree.insertToBTree( msg.key, msg.key, msg.value );
+          } else if( msg.op_type == DELETE_OP )
+            event tree.deleteKeyFromBTree( msg.key );
+          } 
+        }
+
+        void BTree::initBTree() {
+          root = createNewContext("BTreeNode");
+          async root.initializeBTreeNode( root.getContextID(), true, true);
+        }
+
+        void BTree::searchKeyInBTree(const int& key, const MaceKey& src){
+          if( root == NULL){
+            return;
+          }
+          async root.searchKeyInBTreeNode(key, src);
+        }
+
+        void BTree::insertKeyToBTree( const int& key, const int& value ) {
+          async root.insertKeyToBTreeNode(key, value);
+        }
+
+        void BTree::deleteKeyFromBTree( const int& key ) {
+          async root.deleteKeyFromBTreeNode(key);
+        }
+
+        void BTreeNode::initializeBTreeNode( const uint32_t& pNodeId, const bool& r_flag, const bool&  l_flag ) {
+          keyInfos.clear();
+    
+          parentId = pNodeId;
+          root_flag = r_flag;
+          leaf_flag = l_flag;
+
+        }
+
+        void BTreeNode::searchKeyInBTreeNode(const int& key, const MaceKey& src) {
+          uint32_t i;
+          BTreeNode nextNode = NULL;
+          for(i=0; i<keyInfos.size(); i++) {
+            if( keyInfos[i].key == key ) {
+              downcall_route( src, Reply(true) );
+              return;
+            } else if( keyInfos[i].key > key ) {
+              nextNode = keyInfos[i].l_node;
+              break;
+            }
+
+            if( i+1 == keyInfos.size() && key > keyInfos[i].key ) {
+              nextNode = keyInfos[i].r_node;
+              break;
+            }
+          }
+
+          if( nextNode != NULL ) {
+            async nextNode.searchKey( clientId, key, src );
+          } else {
+            downcall_route( src, Reply(false) );
+          }
+        }
+
+        void BTreeNode::insertKeyToBTreeNode( const int& key, const int& value ) {
+          ADD_SELECTORS("BTreeApp");
+          vector<KeyInfo>::iterator k_iter; 
+          BTreeNode nextNode = NULL;
+          uint32_t i = 0;
+          for( k_iter = keyInfos.begin(); k_iter != keyInfos.end(); k_iter++, i++ ) {
+            if( keyInfos[i].key == key ) {
+              keyInfos[i].value = value;
+              return;
+          } else if( keyInfos[i].key > key ) {
+            nextNode = keyInfos[i].l_node;
+            break;
+          }
+
+          if( i+1==keyInfos.size() && keyInfos[i].key < key ) {
+            nextNode = keyInfos[i].r_node;
+          }
+        } 
+
+        if(nextNode == NULL) {
+          KeyInfo newKey;
+          newKey.key = key;
+          newKey.value = value;
+          newKey.l_node = NULL;
+          newKey.r_node = NULL;
+          if( k_iter == keyInfos.end() ) {
+            keyInfos.push_back(newKey);
+          } else {
+            keyInfos.insert(k_iter, newKey);
+          }
+      
+          if( keyInfos.size() > MAX_NKEY_PER_NODE ) {
+            if( parentId == 0 ) { // this node is the root
+              event this->adjust(0);
+            } else {
+              BTreeNode parentNode = getContextObject("BTreeNode", parentId);
+              event parentNode.adjust( this->getContextID() );
+            }
+          }
+        } else {
+          async nextNode.insertKeyToBTreeNode(key, value);
+        }
+      }
+
+      void BTreeNode::deleteKeyFromBTreeNode( const int& key ) {
+        BTreeNode nextNode = NULL;
+        vector<KeyInfo>::iterator k_iter = keyInfos.begin();
+        int tempKey = 0;
+        for(; k_iter != keyInfos.end(); k_iter ++ ) {
+          tempKey = (*k_iter).key;
+          if( tempKey == key ) {
+            break;
+          } else if( tempKey > key ) {
+            nextNode = (*k_iter).l_node;
+            break;
+          }
+
+          if( k_iter+1 == keyInfos.end() && key > tempKey ) {
+            nextNode = (*k_iter).r_node;
+          } 
+        } 
+
+        if( tempKey == key ){
+          BTreeNode r_node = NULL;
+          BTreeNode l_node = (*k_iter).l_node;
+          if( k_iter+1 == keyInfos.end() ) {
+            r_node = (*k_iter).r_node;
+          } else {
+            k_iter ++;
+            r_node = (*k_iter).l_node;
+            k_iter --;
+          }
+          if( r_node != NULL ) {
+            KeyInfo new_key = r_node.removeMostLeftKeyFromBTree();
+            if( new_key.key == 0 ){
+              return;
+            }
+            (*k_iter).key = new_key.key;
+          } else if( l_node != NULL ) {
+            KeyInfo new_key = l_node.removeMostRightKeyFromBTree();
+            if( new_key.key == 0 ){
+              return;
+            }
+            (*k_iter).key = new_key.key;
+          } else {
+            keyInfos.erase(k_iter);
+
+            if( keyInfos.size() < MIN_NKEY_PER_NODE ) {
+              if( parentId == 0 ) { // this node is the root
+                event this->adjust(0);
+              } else {
+                BTreeNode parentNode = getContextObject("BTreeNode", parentId);
+                event parentNode.adjust( this->getContextID() );
+              }
+            } 
+          }
+          return;
+        }
+      
+        if( nextNode != NULL ) {
+          async nextNode.deleteKeyFromBTreeNode(key);
+        }
+      }
+
+      void BTreeNode::initializeBTreeNode2( const uint32_t& pNodeId, const bool& r_flag, const vector<KeyInfo>& k_infos ) {
+        keyInfos.clear();
+        parentId = pNodeId;
+        root_flag = r_flag;
+        leaf_flag = true;
+
+        keyInfos = k_infos;
+
+        for( uint32_t i=0; i<keyInfos.size(); i++ ){
+          if( keyInfos[i].l_node != NULL ){
+            keyInfos[i].l_node.setParentNodeID( this->getContextID() );
+          }
+
+          if( i+1 == keyInfos.size() && keyInfos[i].r_node != NULL ){
+            keyInfos[i].r_node.setParentNodeID( this->getContextID() );
+          }
+        }
+      }
+
+      void BTreeNode::setParentNodeId(const uint32_t& pId) {
+        parentId = pId;
+      }
+
+      uint32_t BTreeNode::getKeySize() {
+        return keyInfos.size();
+      }
+
+      KeyInfo BTreeNode::removeMostRightKeyFromBTree() {
+        if( keyInfos.size() > 0 ) {
+          vector<KeyInfo>::iterator iter = keyInfos.begin();
+          while( iter+1 != keyInfos.end() ) {
+            iter ++;
+          }
+
+          KeyInfo keyInfo = *iter;
+          BTreeNode r_node = keyInfo.r_node;
+          BTreeNode l_node = keyInfo.l_node;
+          if( r_node == NULL ) {
+            if( keyInfos.size() == 1 ) {
+              if( l_node != NULL ) {
+                KeyInfo newKeyInfo = l_node.removeMostRightKeyFromBTree(l_node);
+                if( newKeyInfo.key == 0 ) {
+                  return newKeyInfo;
+                }
+          
+                (*iter).key = newKeyInfo.key;
+                return keyInfo; 
+              } else { // l_node = r_node = NULL
+                keyInfos.erase(iter);
+              }
+            } else {
+              KeyInfo& l_sibling_keyInfo = keyInfos[ keyInfos.size() - 2 ];
+              l_sibling_keyInfo.r_node = keyInfo.l_node;
+              keyInfos.erase(iter);
+            }
+          } else {
+            return r_node.removeMostRightKeyFromBTree();
+          }
+    
+          if( keyInfos.size() < MIN_NKEY_PER_NODE ) {
+            if( parentId ==0 ){
+              event this->adjust(0);
+            } else{
+              BTreeNode parentNode = getContextObject("BTreeNode", parentId);
+              event parentNode.adjust( this->getContextID() );
+            }
+          }
+          return keyInfo;
+        } else {
+      
+          KeyInfo keyInfo;
+          keyInfo.key = 0;
+          return keyInfo;
+        }
+      }
+
+      KeyInfo BTreeNode::removeMostLeftKeyFromBTree() {
+        if( keyInfos.size() > 0 ) {
+          vector<KeyInfo>::iterator iter = keyInfos.begin();
+          KeyInfo keyInfo = *iter;
+          BTreeNode r_node = NULL;
+          BTreeNode l_node = keyInfo.l_node;
+
+          if( keyInfos.size() == 1 ){
+            r_node = keyInfo.r_node;
+          } else{
+            r_node = keyInfos[1].l_node;
+          }
+
+          if( l_node == NULL ) {
+            if( keyInfos.size() == 1 ) {
+              if( r_node != NULL ) {
+                KeyInfo newKeyInfo = r_node.removeMostLeftKeyFromBTree(r_node);
+                if( newKeyInfo.key == 0 ){
+                  return newKeyInfo;
+                }
+                (*iter).key = newKeyInfo.key;
+              } else {
+                keyInfos.erase(iter);
+              }
+            } else {
+              keyInfos.erase(iter);
+            }
+          } else {
+            return l_node.removeMostLeftKeyFromBTree(l_node);
+          }
+    
+          if( keyInfos.size() < MIN_NKEY_PER_NODE ) {
+            if( parentId ==0 ){
+              event this->adjust(0);
+            } else{
+              BTreeNode parentNode = getContextObject("BTreeNode", parentId);
+              event parentNode.adjust( this->getContextID() );
+            }
+          }
+          return keyInfo;
+        } else {
+          KeyInfo keyInfo;
+          keyInfo.key = 0;
+          return keyInfo;
+        }
+      }
+
+      KeyInfo BTreeNode::removeMostLeftKey() {
+        KeyInfo keyInfo = keyInfos[0];
+        keyInfos.erase( keyInfos.begin() );
+
+        return keyInfo;
+      }
+
+      void BTreeNode::addMostRightKey(const KeyInfo& newKeyInfo) {
+        KeyInfo& keyInfo = keyInfos[keyInfos.size()-1];
+        KeyInfo newKey = newKeyInfo;
+        newKey.l_node = keyInfo.r_node;
+        keyInfos.push_back(newKeyInfo);
+      }
+
+      KeyInfo BTreeNode::removeMostRightKey() {
+        KeyInfo rKeyInfo = keyInfos[keyInfos.size()-1];
+        keyInfos.pop_back();
+        KeyInfo& keyInfo = keyInfos[keyInfos.size()-1];
+        keyInfo.r_node = rKeyInfo.l_node;
+        return rKeyInfo;
+      }
+
+      void BTreeNode::addMostLeftKey(const KeyInfo& newKeyInfo) {
+        keyInfos.insert( keyInfos.begin(), newKeyInfo );
+      }
+
+      void BTreeNode::addMostRightKeys(const vector<KeyInfo>& newKeyInfos) {
+        KeyInfo& keyInfo = keyInfos[keyInfos.size()-1];
+
+        for(uint32_t i=0; i<newKeyInfos.size(); i++ ) {
+          KeyInfo tmp_key = newKeyInfos[i];
+          if( i==0 ){
+            tmp_key.l_node = keyInfo.r_node;
+            keyInfo.r_node = NULL;
+          }
+          keyInfos.push_back(tmp_key);
+
+          if( tmp_key.l_node != NULL ){
+            tmp_key.l_node.setParentID(this->getContextID() );
+          }
+
+          if( tmp_key.r_node != NULL ){
+            tmp_key.r_node.setParentID(this->getContextID() );
+          }
+        }
+      }
+
+      void BTreeNode::addMostLeftKeys(const vector<KeyInfo>& newKeyInfos) {
+        vector<KeyInfo> new_keyInfos = newKeyInfos;
+
+        for(uint32_t i=0; i<keyInfos.size(); i++ ) {
+          new_keyInfos.push_back(keyInfos[i]);
+        }
+        keyInfos = new_keyInfos;
+        
+        for(uint32_t i=0; i<newKeyInfos.size(); i++ ) {
+          KeyInfo& keyInfo = newKeyInfos[i];
+
+          if( keyInfo.l_node != NULL ){
+            keyInfo.l_node.setParentID(this->getContextID() );
+          }
+
+          if( keyInfo.r_node != NULL ){
+            keyInfo.r_node.setParentID(this->getContextID() );
+          }
+        }
+      }
+
+      vector<KeyInfo> BTreeNode::splitLeftKeys() {
+        uint32_t mid = (uint32_t)( keyInfos.size() / 2 );
+        vector<KeyInfo> remain_keys;
+        vector<KeyInfo> l_keys;
+        for(uint32_t i=0; i<keyInfos.size(); i++) {
+          if( i<=mid ) {
+            l_keys.push_back( keyInfos[i] );
+          } else {
+            remain_keys.push_back( keyInfos[i] );
+          }
+        }
+
+        keyInfos = remain_keys;
+        return l_keys;
+      }
+
+      void BTreeNode::updateKeyInfos( const vector<KeyInfo>& new_key_infos) {
+        keyInfos = new_key_infos;
+        for(uint32_t i=0; i<keyInfos.size(); i++ ) {
+          KeyInfo& keyInfo = keyInfos[i];
+
+          if( keyInfo.l_node != NULL ){
+            keyInfo.l_node.setParentID(this->getContextID() );
+          }
+
+          if( keyInfo.r_node != NULL ){
+            keyInfo.r_node.setParentID(this->getContextID() );
+          }
+        }
+      }
+
+      vector<KeyInfo> BTreeNode::getKeys() {
+        return keyInfos;
+      }
+
+      void BTreeNode::adjust(const uint32_t& childId) {
+        if( 0 == childId ){ // root node
+          if( keyInfos.size() > MAX_NKEY_PER_NODE) {
+            uint32_t mid = (uint32_t)( keyInfos.size() / 2);
+            vector<KeyInfo> l_node_keys;
+            vector<KeyInfo> r_node_keys;
+
+            for(uint32_t i=0; i<keyInfos.size(); i++) {
+              if( i<mid ){
+                l_node_keys.push_back(keyInfos[i]);
+              } else if( i==mid ){
+                KeyInfo& tmp_key = l_node_keys[ l_node_keys.size()-1 ];
+                tmp_key.r_node = keyInfos[i].l_node;
+              } else if( i>mid ){
+                r_node_keys.push_back(keyInfos[i]);
+              }
+            }
+
+            KeyInfo new_key = keyInfos[mid];
+
+            keyInfos.clear();
+
+            BTreeNode l_node = createNewContext("BTreeNode");
+            BTreeNode r_node = createNewContext("BTreeNode");
+
+            l_node.initializeBTreeNode2(this->getNodeID(), false, l_node_keys);
+            r_node.initializeBTreeNode2(this->getNodeID(), false, r_node_keys);
+
+            new_key.l_node = l_node;
+            new_key.r_node = r_node;
+            keyInfos.push_back(new_key);
+            leaf_flag = false;
+        
+          }
+        }
+      } else {
+        BTreeNode childNode = getContextObject("BTreeNode", childId);
+        if( childNode.getKeySize() > MAX_NKEY_PER_NODE ) {
+          BTreeNode l_sibling = NULL;
+          BTreeNode r_sibling = NULL;
+
+          int l_pos = -1;
+          int r_pos = -1;
+          int child_pos = -1;
+        
+          for(uint32_t i=0; i<keyInfos.size(); i++) {
+            BTreeNode cur_node = keyInfos[i].l_node;
+            if( keyInfos[i].l_node == childNode ){
+              child_pos = i;
+              if( i == keyInfos.size()-1 ) {
+                r_sibling = keyInfos[i].r_node;
+                r_pos = i;
+              } else {
+                r_sibling = keyInfos[i+1].l_node;
+                r_pos = i+1;
+              }
+              break;
+            } else if( i==keyInfos.size()-1 && keyInfos[i].r_node == childNode ) {
+              child_pos = i;
+              l_pos = i;
+              l_sibling = keyInfos[i].l_node;
+              break;
+            }
+
+            l_sibling = keyInfos[i].l_node;
+            l_pos = i;
+          }
+        
+          if( l_sibling !=NULL 0 && l_sibling.getKeySize() < MAX_NKEY_PER_NODE ) {
+            KeyInfo new_key = childNode.removeMostLeftKey();
+            int tmp = keyInfos[l_pos].key; 
+            keyInfos[l_pos].key = new_key.key;
+            new_key.key = tmp;
+            new_key.r_node = new_key.l_node;
+            new_key.l_node = NULL;
+            l_sibling.addMostRightKey(new_key);
+          
+            return; 
+          }
+        
+          if( r_sibling != NULL &&  r_sibling.getKeySize() < MAX_NKEY_PER_NODE ) {
+            KeyInfo new_key = childNode.removeMostRightKey();
+            int tmp = keyInfos[child_pos].key; 
+            keyInfos[child_pos].key = new_key.key;
+            new_key.key = tmp;
+            new_key.l_node = new_key.r_node;
+            new_key.r_node = NULL;
+            r_sibling.addMostLeftKey(r_sibling_id, new_key);
+          
+            return;
+          }
+
+          vector<KeyInfo> new_l_keys = childNode.splitLeftKeys();
+          
+          KeyInfo new_key = new_l_keys.back();
+          new_l_keys.pop_back();
+          new_l_keys[ new_l_keys.size()-1 ].r_node = new_key.l_node;
+          new_key.l_node = NULL;
+
+          BTreeNode n_l_node = createNewContext("BTreeNode");
+          n_l_node.initializeBTreeNode2(this->getContextID(), false, new_l_keys);
+
+          new_key.l_node = n_l_node;
+          
+          for( vector<KeyInfo>::iterator iter=keyInfos.begin(); iter!=keyInfos.end(); iter++ ) {
+            KeyInfo& keyInfo = *iter;
+            if( keyInfo.l_node == childNode ) {
+              keyInfos.insert( iter, new_key );
+              break;
+            }
+
+            if( iter+1 == keyInfos.end() && keyInfo.r_node == childNode ){
+              keyInfo.r_node = NULL;
+              new_key.r_node = childNode;
+              new_key.l_node = n_l_node;
+            }
+          }
+
+          if( keyInfos.size() > MAX_NKEY_PER_NODE ) {
+            //maceout << "To further adjust BTreeNode("<< myNodeId<<") key_size=" << keyInfos.size() << Log::endl;
+            if( parentId == 0){
+              event this->adjust(0);
+            } else {
+              BTreeNode parentNode = getContextObject("BTreeNode", parentId);
+              event parentNode.adjust( this->getContextID() );
+            }
+          }
+          //maceout << "After split BTreeNode("<< childId <<"), BTreeNode("<< myNodeId<<") keyInfos="<< keyInfos << Log::endl;
+        } else if( childNode.childgetKeySize() < MIN_NKEY_PER_NODE ){
+          BTreeNode l_sibling = NULL;
+          BTreeNode r_sibling = NULL;
+
+          int l_pos = -1;
+          int r_pos = -1;
+          int child_pos = -1;
+        
+          for(uint32_t i=0; i<keyInfos.size(); i++) {
+            BTreeNode cur_node = keyInfos[i].l_node;
+            if( keyInfos[i].l_node == childNode ){
+              child_pos = i;
+              if( i == keyInfos.size()-1 ) {
+                r_sibling = keyInfos[i].r_node;
+                r_pos = i;
+              } else {
+                r_sibling = keyInfos[i+1].l_node;
+                r_pos = i+1;
+              }
+              break;
+            } else if( i==keyInfos.size()-1 && keyInfos[i].r_node == childId ) {
+              child_pos = i;
+              l_pos = i;
+              l_sibling = keyInfos[i].l_node;
+              break;
+            }
+
+            l_sibling = keyInfos[i].l_node;
+            l_pos = i;
+          }
+
+        
+          if( l_sibling != NULL && l_sibling.getKeySize() > MIN_NKEY_PER_NODE ) {
+            KeyInfo new_key = l_sibling.removeMostRightKey();
+            int tmp = keyInfos[l_pos].key; 
+            keyInfos[l_pos].key = new_key.key;
+            new_key.key = tmp;
+            new_key.l_node = new_key.r_node;
+            new_key.r_node = NULL;
+            childNode.addMostLeftKey(childId, new_key);
+          
+            return; 
+          }
+        
+          // move one key from right sibling node
+          if( r_sibling !=NULL && r_sibling.getKeySize() > MIN_NKEY_PER_NODE ) {
+            KeyInfo new_key = r_sibling.removeMostLeftKey();
+            int tmp = keyInfos[child_pos].key; 
+            keyInfos[child_pos].key = new_key.key;
+            new_key.key = tmp;
+            new_key.r_node = new_key.l_node;
+            new_key.l_node = NULL;
+            childNode.addMostRightKey(new_key);
+          
+            return;
+          }
+  
+          
+          if( keyInfos.size() == 1 ) {
+            BTreeNode l_node = keyInfos[0].l_node;
+            BTreeNode r_node = keyInfos[0].r_node;
+          
+            vector<KeyInfo> l_keyInfos;
+            vector<KeyInfo> r_keyInfos;
+
+            if( l_node != NULL ){
+              l_keyInfos = l_node.getKeys();
+            }
+            if( r_node != NULL ){
+              r_keyInfos = r_node.getKeys();
+            }
+
+            vector<KeyInfo> new_key_infos;
+            
+            for( uint32_t i=0; i<l_keyInfos.size(); i++ ) {
+              if( i==l_keyInfos.size()-1 ) {
+                keyInfos[0].l_node = l_keyInfos[i].r_node;
+                l_keyInfos[i].r_node = NULL;
+              }
+              new_key_infos.push_back(l_keyInfos[i]);
+            }
+            new_key_infos.push_back(keyInfos[0]);
+            for( uint32_t i=0; i<r_keyInfos.size(); i++ ) {
+              new_key_infos.push_back(r_keyInfos[i]);
+            }
+
+          
+            if( l_node != NULL ){
+              l_node.removeAllChildren();
+            }
+            if( r_node != NULL ) {
+              r_node.removeAllChildren();
+            }
+          
+            keyInfos.clear();
+            keyInfos = new_key_infos;
+            return;
+          } else {
+            BTreeNode l_node = NULL;
+            BTreeNode r_node = NULL;
+
+            KeyInfo pKeyInfo;
+
+            if( l_sibling != NULL ){
+              l_node = l_sibling;
+              r_node = childNode;
+              pKeyInfo = keyInfos[l_pos];
+            } else if( r_sibling != NULL ){
+              l_node = childNode;
+              r_node = r_sibling;
+              pKeyInfo = keyInfos[child_pos];
+            } else { // no left & right sibling
+              if( keyInfos[child_pos].r_node == childNode ) {
+                r_node = childNode;
+              } else {
+                l_node = childNode;
+              }
+              pKeyInfo = keyInfos[child_pos];
+            }
+
+            
+            pKeyInfo.l_node = NULL;
+            pKeyInfo.r_node = NULL;
+
+            vector<KeyInfo> l_keyInfos;
+            vector<KeyInfo> r_keyInfos;
+
+            if( l_node != NULL ){
+              l_keyInfos = l_node.getKeys();
+            }
+            if( r_node_id > 0 ){
+              r_keyInfos = r_node.getKeys();
+            }
+
+            vector<KeyInfo> new_key_infos;
+          
+            for( uint32_t i=0; i<l_keyInfos.size(); i++ ) {
+              if( i==l_keyInfos.size()-1 ) {
+                pKeyInfo.l_node = l_keyInfos[i].r_node;
+                l_keyInfos[i].r_node = NULL;
+              }
+              new_key_infos.push_back(l_keyInfos[i]);
+            }
+            new_key_infos.push_back(pKeyInfo);
+            for( uint32_t i=0; i<r_keyInfos.size(); i++ ) {
+              new_key_infos.push_back(r_keyInfos[i]);
+            }
+
+            for( vector<KeyInfo>::iterator iter=keyInfos.begin(); iter!=keyInfos.end(); iter++ ) {
+              if( (*iter).key == pKeyInfo.key ) {
+                if( iter+1 == keyInfos.end() ) {
+                  if( r_node != NULL ) {
+                    *(iter-1).r_node = r_node; 
+                  } else {
+                    *(iter-1).r_node = l_node;
+                  }
+                } else {
+                  if( r_node == NULL ) {
+                    *(iter+1).l_node = l_node;
+                  }
+                }
+                keyInfos.erase(iter);
+                break;
+              }
+            }
+
+            if( r_node != NULL ){
+              r_node.updateKeyInfos(new_key_infos);
+              if( l_node != NULL ) {
+                l_node.removeAllChildren();
+              }
+            } else if( l_node != NULL ){
+              l_node.updateKeyInfos(l_node_id, new_key_infos);
+            }
+          }
+
+        } // 
+      } // is root
+   
+    } //async adjust 
+
+    downcall maceInit() {
+      BTree tree = createNewContext("BTree");
+      event tree.initBtree();
+    }
+
+  </pre>
+
+      
+
+
+		<script src="js/shCore.js"></script>
+  		<script src="js/shBrushCpp.js"></script>
+  		<script>
+    		SyntaxHighlighter.all()
+  		</script>
+	</body>
+</html>
+

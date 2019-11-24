@@ -1,0 +1,71 @@
+<html>
+	<head>
+  		<link href="css/shCore.css" rel="stylesheet" type="text/css" />
+  		<link href="css/shThemeDefault.css" rel="stylesheet" type="text/css" />
+      <title>AEON Fault Tolerance</title>
+	</head>
+
+	<body>
+		<h2>AEON eManager failure</h2>
+    <p>eManager is stateless and is only responsible to update context mapping and DAG into cloud storage. 
+      Both eManager and cloud storage are assigned a privilege level. eManager could only update DAG and 
+      context mapping in cloud storage when its privilege is higher than or equal to storage's privilege level.
+    </p>
+
+    <p>Context migration algorithm: to migrate context C from S1 to S2</p>
+    <ol>
+      <li>Upon receiving migration request, the eManager will compare its privilege level and storage's. 
+        If it finds its level is smaller than storage, it ignores the request.</li>
+      <li>eManager informs S2 about migration context C and eManager's current privilege level. 
+        eManager will wait until receive ack from S2</li>
+      <li>eManager informs S1 to migrate C to S2. eManager also sends S1 its privilege level. 
+        Upon receiving message from eManager, S1 will holds all messages to C and create a 
+        migration event and put it in C's queue;</li>
+      <li>The migration event will enter C for execution when all previous events have committed. 
+        Then it serializes C and send C to S2 (C is still on S1);</li>
+      <li>S2 receives C from S1 and inform eManager the migration is done;</li>
+      <li>eManager updates the context mapping in cloud storage and inform S1;</li>
+      <li>S1 deletes C and forwards kept messages to S2;</li>
+    </ol>
+		
+    <p>Here we simply assume eManager is placed on a separate server. 
+      And S1 and S2 never fail during migration.
+    </p>	
+		
+		<p>At the beginning of migration, S1 and S2 will receive the privilege level of current eManager. 
+      And for all following messages from eManager, this privilege level will be included in those messages. 
+      If S1 and S2 find their kept privilege level is different from messages' privilege level, 
+      they just simply ignore those messages.
+    </p>
+
+		<p>During migration, both S1 and S2 will periodically check eManager's states. 
+      If S1 or S2 detects eManager failed (eManager may fail or is very slow). Then:
+    </p>
+    <ol>
+      <li>it waits for a certain time and check eManager again. 
+        This is to make sure the other server will be also aware of eManager failed.</li>
+      <li>it tries to lock eManager via zookeeper;</li>
+      <li>it compare received eManager's privilege level and current storage's privilege level. If:</li>
+      <ol>
+        <li>its received privilege level is the same as storage's privilege level, goes to step 4;</li>
+        <li>otherwise, new eManager is already elected. It just updates its eManager privilege level 
+          and read the latest context mapping and exists directly.</li>
+      </ol>
+      <li>it elects a new eManager via zookeeper and assigns new privilege level (must be larger than the old one) 
+        to both new eManager and storage; </li>
+      <li> it releases the lock on eManager and read the latest context mapping from the storage;</li>
+    </ol>
+		
+    <p>eManager is only responsible for migration. So it doesn't affect the application execution until the
+      contexts migration is required. If one worker server doesn't receive response for a certain time, it
+      will process eManager failure as steps above.
+    </p>
+		
+ 	<script src="js/shCore.js"></script>
+  		<script src="js/shBrushCpp.js"></script>
+  		<script>
+    		SyntaxHighlighter.all()
+  		</script>
+	</body>
+</html>
+

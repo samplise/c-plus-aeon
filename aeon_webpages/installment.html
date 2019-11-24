@@ -1,0 +1,60 @@
+<html>
+	<head>
+  		<link href="css/shCore.css" rel="stylesheet" type="text/css" />
+  		<link href="css/shThemeDefault.css" rel="stylesheet" type="text/css" />
+      <title>AEON Installment</title>
+	</head>
+
+	<body>
+		<h1>AEON Installment</h1>
+		
+    <h2>1) Dependencies:</h2>
+    <p>Currently AEON is only tested on linux. Please install all required software package as below:</p>
+
+		<h3>gcc/g++:</h3>
+		<p>The GNU C and C++ compilers. AEON is used regularly with GCC versions 4.5 and
+      4.6. It has been known to work in the past with 3.4 (including MinGW),  4.0,
+      4.1,  4.2 and 4.3,  and prior to that,  it has in the worked with a few GCC
+      version 3.3.X systems,  but most frequently causes internal compiler
+      segmentation faults. Using at least version 3.4 is highly recommended. This
+      should also be accompanied with a build system that cmake can output builds for.)
+    </p>	
+		
+		<h3>perl:</h3>
+		<p>Perl version 5.8 or greater. Additionally,  Class-MakeMethods and Parse-RecDescent modules are needed (and are included in mace-extras).</p>
+
+		<h3>system libraries:</h3>
+		<p>libpthread,  libm,  libcrypto,  libstdc++,  and libssl.</p>
+		
+    <h3>libboost:</h3>
+		<p>Used in a few places for shared pointers and lexical casting. Requires libboost-test and libboost-filesystem.</p>
+
+		<h3>libdb_cxx:</h3>
+    <p>Version 4.X. This is the Berkeley DB package,  and is optional for building AEON.</p>
+
+    <h3>cmake:</h3>
+  	<p>AEON uses the CMake build system for cross-platform building.</p>
+
+  	<h3>OpenSSL:</h3>
+  	<p>Cryptography support.</p>
+
+  	<h3>Python:</h3>
+  	<p>Python 2.7 or later version.</p>
+
+  	<h2>2) Getting AEON source codes:</h2>
+    <p>hg clone https://bsang@bitbucket.org/bsang/distributed-eventwave</p>
+
+    <h2>3) Compile:</h2>
+    <p>cp distributed-eventwave/demo/Serv-CMakeLists.txt distributed-eventwave/services/CMakeLists.txt</p>
+    <p>cp distributed-eventwave/demo/App-CMakeLists.txt distributed-eventwave/applications/testrun/CMakeLists.txt</p>
+    <p>cd distributed-eventwave/builds/</p>
+    <p>cmake ../</p>
+
+  	<script src="js/shCore.js"></script>
+  		<script src="js/shBrushCpp.js"></script>
+  		<script>
+    		SyntaxHighlighter.all()
+  		</script>
+	</body>
+</html>
+

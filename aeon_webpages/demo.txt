@@ -1,0 +1,59 @@
+Here we introduce how to play the demo of AEON. In this demo, we would like to
+show how a game server scale up & down according to the number of active
+clients. In this demo, it requires 5 machines.
+
+1) compile:
+cd distributed-eventwave/builds/
+make mace
+
+make ElasticTagApp
+
+If you encounter errors in this step, please edit file: 
+distributed-eventwave/builds/services/ElasticTagApp/CMakeFiles/ElasticTagApp.dir/flags.make
+
+Add "-std=c++0x" after "-Werror", which should be "-Werror -std=c++0x"
+
+make contextrun
+
+2) create client & server folders
+
+on client server:
+mkdir ~/AEON/client
+
+on all server machines
+mkdir ~/AEON/server
+
+3) configuration file
+go to /distributed-eventwave/demo
+edit file hosts and put the machines as the following order:
+client-machine
+server-machine1
+server-machine2
+server-machine3
+server-machine4
+
+./generate-params-files.sh
+It will generate required configuration file
+
+4) Pre-demo
+
+Please install pssh
+
+
+5) run demo
+go to /distributed-eventwave/demo
+cp ../builds/application/testrun/contextrun
+
+./prepare_execute.sh
+./start_servers.sh
+./start_clients.sh
+
+6) observing output
+The whole execution will last about 25 mins. After 30mins, 
+./stop-app.sh
+
+Then you can collect output file (~/AEON/server/output) from all 4 servers.
+Then you can obeserve for Room[2] and Room[3] and Room[4],  their output
+appears on different output file,  which indicates they migrate among those
+servers.
+

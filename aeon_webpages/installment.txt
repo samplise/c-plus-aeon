@@ -1,0 +1,44 @@
+1) Dependencies:
+Currently AEON is only tested on linux. Please install all
+required software package as below:
+
+gcc/g++:
+The GNU C and C++ compilers. Mace is used regularly with GCC versions 4.5 and
+4.6. It has been known to work in the past with 3.4 (including MinGW),  4.0,
+4.1,  4.2 and 4.3,  and prior to that,  it has in the worked with a few GCC
+version 3.3.X systems,  but most frequently causes internal compiler
+segmentation faults. Using at least version 3.4 is highly recommended. This
+should also be accompanied with a build system that cmake can output builds
+for.)
+
+perl:
+Perl version 5.8 or greater. Additionally,  Class-MakeMethods and
+Parse-RecDescent modules are needed (and are included in mace-extras).
+
+system libraries:
+libpthread,  libm,  libcrypto,  libstdc++,  and libssl.
+
+libboost:
+Used in a few places for shared pointers and lexical casting. Requires
+libboost-test and libboost-filesystem.
+
+libdb_cxx:
+Version 4.X. This is the Berkeley DB package,  and is optional for building
+Mace.
+
+cmake:
+Mace uses the CMake build system for cross-platform building.
+
+OpenSSL:
+Cryptography support
+
+lgrind:
+For making the documentation from the source files,  beautifying the source
+code. Also needs LaTeX.
+
+2) getting AEON source code:
+hg clone https://bsang@bitbucket.org/bsang/distributed-eventwave
+
+3) compile
+cd distributed-eventwave/builds/
+cmake ../
