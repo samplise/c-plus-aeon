@@ -12,17 +12,14 @@
     <p>We have provided a docker image which has already setup all necessary environment for AEON. Please follow <a href="https://docs.docker.com/">docker</a> to install docker at first. </p>
 
 		<h2>Pull docker image:</h2>
-    <p>We have provided a docker image which has already setup all necessary environment for AEON. Please follow <a href="https://docs.docker.com/">docker</a> to install docker at first. </p>
+    <p>docker image pull huilu1983/peca:gold.</p>
 
-  	<h2>2) Getting AEON source codes:</h2>
-    <p>hg clone https://bsang@bitbucket.org/bsang/distributed-eventwave</p>
+  	<h2>Download AEON source code:</h2>
+    <p>git clone https://github.com/samplise/c-plus-aeon.git</p>
 
-    <h2>3) Compile:</h2>
-    <p>cp distributed-eventwave/demo/Serv-CMakeLists.txt distributed-eventwave/services/CMakeLists.txt</p>
-    <p>cp distributed-eventwave/demo/App-CMakeLists.txt distributed-eventwave/applications/testrun/CMakeLists.txt</p>
-    <p>cd distributed-eventwave/builds/</p>
-    <p>cmake ../</p>
-
+    <h2>Start container:</h2>
+    <p>docker run --rm -it -v /path-to-aeon-code:/aeon -w /aeon huilu1983/peca:gold bash</p>
+    
   	<script src="js/shCore.js"></script>
   		<script src="js/shBrushCpp.js"></script>
   		<script>
