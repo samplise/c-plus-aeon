@@ -2,11 +2,11 @@
 	<head>
   		<link href="css/shCore.css" rel="stylesheet" type="text/css" />
   		<link href="css/shThemeDefault.css" rel="stylesheet" type="text/css" />
-      <title>Step-by-Step Instructions</title>
+      <title>Implement your first AEON program</title>
 	</head>
 
 	<body>
-		<h1>Step-by-Step instructions</h1>
+		<h1>Implement your first AEON program</h1>
 		<p>Please follow the step-by-step instructions to program you first elastic application: elastic binary tree.</p>
 
 		<h3>Step #1: environment setup</h3>
@@ -15,13 +15,13 @@
 		<h3>Step #2: implement your first elastic application</h2>
 		<p>AEON programming syntax just extends the syntax of C++. So it's easy for programmers to master AEON if they are familiar with C++.</p>
 
-		<h3>contextclass and context</h3>
-		<p><b>contextclass</b> in AEON is similar to <b>class</b> in C++, while <b>context</b> in AEON is similar to <b>object</b> in C++. 	
-			Porgrammers need to define contextclasses and create instances (contexts) during runtime. The definition of contextclass is exact the 
+		<h3>actorclass and actor</h3>
+		<p><b>actorclass</b> in AEON is similar to <b>class</b> in C++, while <b>actor</b> in AEON is similar to <b>object</b> in C++. 	
+			Porgrammers need to define actorclasses and create instances (actor) during runtime. The definition of actorclass is exact the 
 			same as class in C++. Check the following example:  
 		</p>
 		<pre class='brush: cpp'>
-  			contextclass SampleContext {
+  			actorclass SampleActor {
   				int id;
   				string name;
 
@@ -30,40 +30,28 @@
   			}
   		</pre>
 		
-		<p>However, there are still many differences between contextclass/context and class/object. The context in AEON are more like a reference
-			(which is similar to JAVA). And programmers need to use a special API to create contexts from contextclass:
+		<p>However, there are still many differences between actorclass/actor and class/object. The actor in AEON is more like a reference
+			(which is similar to JAVA). And programmers need to use a special API to create actors from actorclass:
 		</p>
 
 		<pre class='brush: cpp'>
-  			SampleContext sampleA = createContextObject("SampleClass");
-  			SampleContext sampleB = createContextObject("SampleClass");
+  			SampleActor sampleA = createActor("SampleActor");
+  			SampleActor sampleB = createActor("SampleActor");
 
   			simpleA.setID(1);
   			simpleB.setName("B");
   		</pre>
 
-  		<p>In the codes above, you have created two contexts in one piece of codes. Please pay attention here, the runtime may put them on 
+  		<p>In the codes above, you have created two actors in one piece of codes. Please pay attention here, the runtime may put them on 
   			different servers. 
   			But the programmers needn't care about this problem. They could invoke their member funtions directly. If those contexts
   			are on remote servers, the runtime will handle them.
   		</p>
 
-  		<p>In many scenarioes, the programmers would like to refer a context directly. So we also have another way for programmers to refer
-  			a context:
-  		</p>
-
-  		<pre class='brush: cpp'>
-  			SampleContext sampleB = getContextObject("SampleClass", id);
-  			
-  			simpleB.setName("new B");
-  		</pre>
-  		<p>Each context has an unique id. The runtime will return the context according to a given id. If there is no context can be mapped to the 	
-  			given id, the runtime will create a new context and take the given id as its unique id.
-  		</p>
-
+  		
   		<h3>Ownership</h3>
   		<p>In order to preserve strong consistency and deadlock-freedom, we have introduce ownership into AEON. 
-  			All contexts in the application will form a DAG structure during runtime. Fortunately, the ownership are implicit to programmers.
+  			All actors in the application will form a DAG structure during runtime. Fortunately, the ownership are implicit to programmers.
   			Programmers only need to follow several simple rules to construct the ownership.
   		</p>
 
@@ -72,23 +60,23 @@
   		</p>
 
   		<pre class='brush: cpp'>
-  			contextclass Student {
+  			Actorclass Student {
   				...
   			} 
 
-  			contextclass Department {
+  			Actorclass Department {
   				vector<Student> students;
   				...
   			}
 
-  			contextclass University {
+  			Actorclass University {
   				vector<Department> departments;
   			}
   		</pre>
 
-  		<p>In the contextclass definition, if context C is the member variable of context B, then B is the owner of C. 
-  			In the piece of codes above, the Department context is the owner of Student contexts which belong to this Department. 
-  			Here one Student may be the member variable of two Department contexts.
+  		<p>In the contextclass definition, if actor C is the member variable of actor B, then B is the owner of C. 
+  			In the piece of codes above, the Department actor is the owner of Student actors which belong to this Department. 
+  			Here one Student may be the member variable of two Department actors.
   		</p>
 
   		<p>One problem the programmers should avoid in ownership is cycle. As the example above, if University is the owner of Department which Department is the owner of Student. Then Student contextclass shouldn't have a member variable typed University or Department. 
@@ -100,7 +88,7 @@
   		</p>	
 
   		<pre class='brush: cpp'>
-  			contextclass BinaryTreeNode {
+  			actorclass BinaryTreeNode {
   				int key;
   				BinaryTreeNode left_node;
   				BinaryTreeNode right_node;
